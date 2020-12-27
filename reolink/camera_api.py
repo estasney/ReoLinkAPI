@@ -13,6 +13,7 @@ import aiohttp
 from dateutil.relativedelta import relativedelta
 
 from reolink.utils import SearchResponse
+from reolink.common import AuthenticationError
 
 MANUFACTURER = "Reolink"
 DEFAULT_STREAM = "main"
@@ -92,6 +93,11 @@ class Api:
 
         Returns
         -------
+        bool
+
+        Raises
+        -------
+        AuthenticationError
 
         """
         body = [{
@@ -109,8 +115,11 @@ class Api:
                 logger.error(
                         "Unable to get Motion detection state at IP {}".format(self.host))
                 return False
-
-            return json_data[0]["value"]["state"] == 1
+            try:
+                return json_data[0]["value"]["state"] == 1
+            except KeyError:
+                self.clear_token()
+                raise AuthenticationError("Not Authenticated")
         except (TypeError, json.JSONDecodeError, KeyError):
             self.clear_token()
             return False
