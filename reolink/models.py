@@ -12,7 +12,7 @@ Base = declarative_base()
 Session = sessionmaker()
 
 
-def get_session(db_url):
+def get_session(db_url) -> Session:
     engine = create_engine(db_url)
     Base.metadata.create_all(engine)
     Session.configure(bind=engine)
