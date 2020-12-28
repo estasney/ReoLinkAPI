@@ -6,7 +6,8 @@
 
 import io
 import os
-from setuptools import find_packages, setup
+from Cython.Build import cythonize
+from setuptools import find_packages, setup, Extension
 
 # Package meta-data
 NAME = 'reolink-api'
@@ -60,5 +61,10 @@ setup(
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.8'
     ],
+    ext_modules=cythonize(
+            Extension("reolink.interval.c_interval", ["reolink/interval/c_interval.pyx"]),
+            annotate=True,
+            compiler_directives=dict(language_level=3)
+            )
 
 )
