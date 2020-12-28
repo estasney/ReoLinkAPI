@@ -5,7 +5,7 @@ import sys
 from datetime import datetime
 from typing import List, Tuple
 from reolink.common import AuthenticationError
-from reolink.models import Channel, get_session, MotionDetection, Session
+from reolink.models import Channel, get_session, Session
 from reolink.camera_api import Api
 
 logger = logging.getLogger('detect')
@@ -14,7 +14,7 @@ logging.config.fileConfig('logging.conf')
 
 async def poll_channel(channel: Channel, api: Api, session: Session, force_store: bool = False):
     """
-    Poll a channel for it's Motion Detection state. Conditionally stores the value with session_
+    Poll a channel for it's Motion Detection state. Passes value to channel to conditionally store
 
     Parameters
     ----------
@@ -28,21 +28,19 @@ async def poll_channel(channel: Channel, api: Api, session: Session, force_store
         If true, store the current motion detection state.
         If false, only stores if `current_state != channel.last_state`
 
+    Returns
+    -------
+
+    bool, if True, state has changed and session should commit
 
     """
     try:
         md_detect = await api.get_motion_state(channel.id)
-    except AuthenticationError as e:
-        raise e
-    last_detect = channel.last_state
-    if last_detect is None or force_store is True:
-        db_detect = MotionDetection(channel_id=channel.id, detected=md_detect, dt=datetime.now())
-        session.add(db_detect)
-        session.commit()
-    elif last_detect != md_detect:
-        db_detect = MotionDetection(channel_id=channel.id, detected=md_detect, dt=datetime.now())
-        session.add(db_detect)
-        session.commit()
+    except AuthenticationError as auth_error:
+        raise auth_error
+
+    state_changed = channel.handle_detection(md_detect, session, force_new=force_store)
+    return state_changed
 
 
 def setup_channels(session: Session, channels: List[Tuple[int, str]]):
@@ -66,13 +64,14 @@ async def setup_api(host: str, username: str, password: str) -> Api:
 
 async def poll_channels(session: Session, api: Api, channels: List[Channel], force_store: bool = False):
     try:
-        await asyncio.gather(
+        state_changes = await asyncio.gather(
                 *[poll_channel(channel, api, session, force_store) for channel in channels]
                 )
-        session.commit()
-    except AuthenticationError:
+        if any(state_changes):
+            session.commit()
+    except AuthenticationError as auth_error:
         session.rollback()
-        raise e
+        raise auth_error
 
 
 def run_detect(host: str, username: str, password: str, db_uri: str, channels: List[Tuple[int, str]]):
@@ -92,11 +91,8 @@ def run_detect(host: str, username: str, password: str, db_uri: str, channels: L
     """
     api = asyncio.run(setup_api(host, username, password))
     db_session = get_session(db_uri)
-    logger.info("Session Created")
-    logger.info("Setup Channel")
     channels = setup_channels(db_session, channels)
-    logger.info("Channels Created")
-    logger.info("Channel Created")
+    logger.info("Channel Setup Complete")
 
     asyncio.run(poll_channels(db_session, api, channels, force_store=True))
 
