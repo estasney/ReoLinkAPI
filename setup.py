@@ -17,7 +17,7 @@ AUTHOR = 'Eric Stasney'
 REQUIRES_PYTHON = '>=3.8.0'
 VERSION = '0.0.1'
 
-REQUIRED = ['aiohttp']
+REQUIRED = ['aiohttp', 'python-dateutil', 'toolz', 'SQLAlchemy']
 
 EXTRAS = {}
 
