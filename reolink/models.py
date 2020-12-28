@@ -33,7 +33,7 @@ class Channel(Base):
     id = Column(Integer, primary_key=True, autoincrement=False)
     name = Column(String(128))
     motion_started = Column(DateTime, nullable=True, default=None)
-    motions = relationship("MotionRange", back_popuates="channel")
+    motions = relationship("MotionRange", back_populates="channel")
 
     def handle_detection(self, detection: bool, session: Session, force_new: bool = False):
         """
