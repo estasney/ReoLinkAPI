@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import logging.config
 import sys
 from datetime import datetime
 from typing import List, Tuple
@@ -7,7 +8,8 @@ from reolink.common import AuthenticationError
 from reolink.models import Channel, get_session, MotionDetection, Session
 from reolink.camera_api import Api
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('detect')
+logging.config.fileConfig('logging.conf')
 
 
 async def poll_channel(channel: Channel, api: Api, session: Session, force_store: bool = False):
@@ -28,7 +30,10 @@ async def poll_channel(channel: Channel, api: Api, session: Session, force_store
 
 
     """
-    md_detect = await api.get_motion_state(channel.id)
+    try:
+        md_detect = await api.get_motion_state(channel.id)
+    except AuthenticationError as e:
+        raise e
     last_detect = channel.last_state
     if last_detect is None or force_store is True:
         db_detect = MotionDetection(channel_id=channel.id, detected=md_detect, dt=datetime.now())
@@ -60,11 +65,14 @@ async def setup_api(host: str, username: str, password: str) -> Api:
 
 
 async def poll_channels(session: Session, api: Api, channels: List[Channel], force_store: bool = False):
-    await asyncio.gather(
-            *[poll_channel(channel, api, session, force_store) for channel in channels]
-            )
-
-    session.commit()
+    try:
+        await asyncio.gather(
+                *[poll_channel(channel, api, session, force_store) for channel in channels]
+                )
+        session.commit()
+    except AuthenticationError:
+        session.rollback()
+        raise e
 
 
 def run_detect(host: str, username: str, password: str, db_uri: str, channels: List[Tuple[int, str]]):
