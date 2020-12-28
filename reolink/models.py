@@ -23,7 +23,7 @@ class MotionRange(Base):
 
     id = Column(Integer, primary_key=True)
     channel_id = Column(Integer, ForeignKey('channels.id'))
-    channel = relationship("Channel", back_populates="intervals")
+    channel = relationship("Channel", back_populates="motions")
     range = Column(TSRANGE())
 
 
