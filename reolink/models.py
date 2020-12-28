@@ -1,8 +1,9 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from psycopg2.extras import DateTimeRange
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship, sessionmaker
 from sqlalchemy.dialects.postgresql import TSRANGE
 
@@ -25,6 +26,35 @@ class MotionRange(Base):
     channel_id = Column(Integer, ForeignKey('channels.id'))
     channel = relationship("Channel", back_populates="motions")
     range = Column(TSRANGE())
+
+    @hybrid_property
+    def seconds(self):
+        return (self.range.upper - self.range.lower).total_seconds()
+
+    @classmethod
+    def _td(cls, td: timedelta):
+        mm, ss = divmod(td.total_seconds(), 60)
+        hh, mm = divmod(mm, 60)
+        s = "%d:%02d:%02d" % (hh, mm, ss)
+        return s
+
+    def __repr__(self):
+        if isinstance(self.range.lower, datetime):
+            s1 = self.range.lower.strftime("%m/%d %I:%M:%S %p")
+        else:
+            s1 = " ? "
+        if isinstance(self.range.upper, datetime):
+            s2 = self.range.upper.strftime("%m/%d %I:%M:%S %p")
+        else:
+            s2 = " ? "
+        if isinstance(self.range.lower, datetime) and isinstance(self.range.upper, datetime):
+            td = MotionRange._td((self.range.upper - self.range.lower))
+        else:
+            td = "?"
+        return f"<Channel {self.channel_id}> : [{td}]  ({s1} - {s2})"
+
+
+
 
 
 class Channel(Base):

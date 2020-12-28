@@ -87,7 +87,6 @@ def run_detect(host: str, username: str, password: str, db_uri: str, channels: L
     channels : List[Tuple[int, str]]
         List of tuples of form: `(channel_number, channel_name)`
 
-
     """
     api = asyncio.run(setup_api(host, username, password))
     db_session = get_session(db_uri)
