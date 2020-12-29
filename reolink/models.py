@@ -6,6 +6,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship, sessionmaker
 from sqlalchemy.dialects.postgresql import TSRANGE
+from sqlalchemy.sql.expression import func, extract
 
 Base = declarative_base()
 Session = sessionmaker()
@@ -30,6 +31,11 @@ class MotionRange(Base):
     @hybrid_property
     def seconds(self):
         return (self.range.upper - self.range.lower).total_seconds()
+
+    @seconds.expression
+    def seconds(cls):
+        intv = func.upper(cls.range) - func.lower(cls.range)
+        return extract('epoch', intv)
 
     @classmethod
     def _td(cls, td: timedelta):
