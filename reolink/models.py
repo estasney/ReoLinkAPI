@@ -60,9 +60,6 @@ class MotionRange(Base):
         return f"<Channel {self.channel_id}> : [{td}]  ({s1} - {s2})"
 
 
-
-
-
 class Channel(Base):
     __tablename__ = 'channels'
 

@@ -62,13 +62,15 @@ async def setup_api(host: str, username: str, password: str) -> Api:
     return api
 
 
-async def poll_channels(session: Session, api: Api, channels: List[Channel], force_store: bool = False):
+async def poll_channels(session: Session, api: Api, channels: List[Channel], force_store: bool = False,
+                        wait_time: int = 1):
     try:
         state_changes = await asyncio.gather(
                 *[poll_channel(channel, api, session, force_store) for channel in channels]
                 )
         if any(state_changes):
             session.commit()
+        await asyncio.sleep(wait_time)
     except AuthenticationError as auth_error:
         session.rollback()
         raise auth_error
