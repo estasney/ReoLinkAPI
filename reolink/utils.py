@@ -33,6 +33,16 @@ class SearchResponse:
 
 @dataclass
 class SearchResultFile:
+    """
+    A File as Returned by NVR
+
+    Notes
+    -----
+    StartTime & EndTime seem to refer to local time
+
+    PlaybackTime appears to be UTC time
+
+    """
     EndTime: 'SearchResultTime'
     PlaybackTime: 'SearchResultTime'
     StartTime: 'SearchResultTime'
@@ -48,6 +58,10 @@ class SearchResultFile:
         et = self.EndTime.dt.strftime("%m/%d %I:%M:%S %p")
 
         return f"{st} :: {pt} :: {et}"
+
+    def __contains__(self, item: datetime):
+        """ Test if datetime is in the range of (StartTime, EndTime] """
+        return self.StartTime.dt <= item < self.EndTime.dt
 
     @classmethod
     def _from_file_resp(cls, file: dict):
