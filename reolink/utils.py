@@ -88,4 +88,4 @@ class SearchResultTime:
 
 
 def dt_string(dt: datetime):
-    return f"{dt.year}{dt.month}{dt.day}{dt.hour}{dt.minute}{dt.second}"
+    return f"{dt.year}{dt.month:02d}{dt.day:02d}{dt.hour:02d}{dt.minute:02d}{dt.second:02d}"
