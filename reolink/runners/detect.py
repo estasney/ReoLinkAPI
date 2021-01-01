@@ -9,7 +9,7 @@ from reolink.models import Channel, get_session, Session
 from reolink.camera_api import Api
 
 logger = logging.getLogger('detect')
-logging.config.fileConfig('logging.conf')
+# logging.config.fileConfig('logging.conf')
 
 
 async def poll_channel(channel: Channel, api: Api, session: Session, force_store: bool = False):

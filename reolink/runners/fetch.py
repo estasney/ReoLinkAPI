@@ -10,7 +10,7 @@ from reolink.camera_api import Api, STREAM_TYPES
 from reolink.utils import SearchResponse, SearchResultFile, dt_string
 
 logger = logging.getLogger('fetch')
-logging.config.fileConfig('logging.conf')
+# logging.config.fileConfig('logging.conf')
 
 
 def get_stream(api: Api, start_time: datetime, port: int = 1935, channel: Optional[int] = None,
@@ -44,6 +44,7 @@ def get_stream(api: Api, start_time: datetime, port: int = 1935, channel: Option
     # Determine a window for querying files that meet specified start_time
     window_start = start_time - relativedelta(hours=4)
     window_end = start_time + relativedelta(hours=4)
+    window_end = min(datetime.now(), window_end)  # Future dates will cause error
 
     recordings = asyncio.run(api.query_recordings(window_start, window_end, channel=channel, stream=stream))
 
@@ -59,7 +60,7 @@ def get_stream(api: Api, start_time: datetime, port: int = 1935, channel: Option
         raise Exception(f"No Recordings Match Found for {start_time}")
 
     seek_time = int(round((start_time - matched_file.StartTime.dt).total_seconds(), 0))
-    matched_file_start_dt_str = dt_string(matched_file.StartTime.dt)
+    matched_file_start_dt_str = dt_string(matched_file.PlaybackTime.dt)
 
     params = {
         "port": port,
@@ -76,6 +77,8 @@ def get_stream(api: Api, start_time: datetime, port: int = 1935, channel: Option
 
     url_stream = f"http://{api.host}/flv?{url_params}"
     logger.info(f"Got URL : {url_stream}")
+
+    return url_stream
 
 
 
