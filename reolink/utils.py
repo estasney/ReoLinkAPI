@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import List
 from toolz.dicttoolz import get_in
 
+
 def must_get(keys, coll):
     return get_in(keys, coll, no_default=True)
 
@@ -17,9 +18,10 @@ class SearchResponse:
     @classmethod
     def from_response(cls, resp: dict):
         init_data = {
-            "cmd": resp['cmd'],
-            "code": resp['code'],
-            "channel": must_get(['value', 'SearchResult', 'channel'], resp)}
+            "cmd":     resp['cmd'],
+            "code":    resp['code'],
+            "channel": must_get(['value', 'SearchResult', 'channel'], resp)
+            }
 
         resp_files = []
         for file in must_get(['value', 'SearchResult', 'File'], resp):
@@ -27,6 +29,7 @@ class SearchResponse:
 
         init_data['files'] = resp_files
         return SearchResponse(**init_data)
+
 
 @dataclass
 class SearchResultFile:
@@ -46,20 +49,17 @@ class SearchResultFile:
 
         return f"{st} :: {pt} :: {et}"
 
-
-
     @classmethod
     def _from_file_resp(cls, file: dict):
         init_data = {
-            "EndTime": SearchResultTime.from_dict(file['EndTime']),
+            "EndTime":      SearchResultTime.from_dict(file['EndTime']),
             "PlaybackTime": SearchResultTime.from_dict(file['PlaybackTime']),
-            "StartTime": SearchResultTime.from_dict(file['StartTime']),
+            "StartTime":    SearchResultTime.from_dict(file['StartTime']),
             }
 
         straight_data = {k: file[k] for k in ['frameRate', 'height', 'size', 'type', 'width']}
         merged_data = {**init_data, **straight_data}
         return SearchResultFile(**merged_data)
-
 
 
 @dataclass
@@ -87,8 +87,5 @@ class SearchResultTime:
         self.dt = datetime(self._year, self._mon, self._day, self._hour, self._min, self._sec)
 
 
-
-
-
-
-
+def dt_string(dt: datetime):
+    return f"{dt.year}{dt.month}{dt.day}{dt.hour}{dt.minute}{dt.second}"
