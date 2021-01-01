@@ -39,7 +39,8 @@ class DTOffset(TypedDict):
 class Api:
     """Reolink API class."""
 
-    def __init__(self, host: str, username: str, password: str, port: int = 80, channel: int = 0, timeout: int = 10):
+    def __init__(self, host: str, username: str, password: str, port: int = 80, channel: int = 0, timeout: int = 10,
+                 stream: STREAM_TYPES = DEFAULT_STREAM):
         """
 
         Parameters
@@ -54,6 +55,7 @@ class Api:
             Defaults to 0
         timeout : int, optional
             Timeout, in seconds, defaults to 10
+        stream
         """
         self.url = f"http://{host}:{port}/cgi-bin/api.cgi"
         self.host = host
@@ -64,7 +66,7 @@ class Api:
         self.timeout = aiohttp.ClientTimeout(total=timeout)
         self.token = None
         self.lease_time = None
-        self.stream = DEFAULT_STREAM
+        self.stream = stream
         self.protocol = DEFAULT_PROTOCOL
 
     @property
