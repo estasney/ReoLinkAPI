@@ -3,129 +3,51 @@ import logging.config
 import math
 import os
 import subprocess
-from datetime import datetime
-from typing import Optional, cast, List, Tuple
+from datetime import datetime, timedelta
+from typing import Optional, cast, List, Tuple, Union
 from urllib.parse import urlparse, urlencode
 from tempfile import TemporaryDirectory
 from dateutil.relativedelta import relativedelta
-
+from collections import namedtuple
 from reolink.camera_api import Api, STREAM_TYPES
 from reolink.utils import SearchResponse, SearchResultFile, dt_string
 
 logger = logging.getLogger('fetch')
 
-
-def get_stream(api: Api, start_time: datetime, port: int = 1935, channel: Optional[int] = None,
-               stream: Optional[STREAM_TYPES] = None):
-    """
-    host/flv?port=1935&app=bcs&stream=playback.bcs&channel=0&type=1&start=20201229045959&seek=1&token
-
-    start must correspond with a file that exists on NVR
-    seek corresponds to seconds offset
-
-    These
-
-    Parameters
-    ----------
-    api : Api
-        Api, required in order to query available recordings meeting a certain timeframe
-    start_time : datetime
-        The desired start_time
-    port : int, defaults to 1935
-        RTMP port
-    channel : int, optional
-        If passed get stream for this channel. Otherwise get API's channel
-    stream : One of {'main', 'sub'}, optional
-        If passed, must be one of STREAM_TYPES. Defaults to api.stream
-
-    Returns
-    -------
-
-    """
-
-    # Determine a window for querying files that meet specified start_time
-    window_start = start_time - relativedelta(hours=4)
-    window_end = start_time + relativedelta(hours=4)
-
-    # Future dates will cause error
-    # It also seems to throw an error when querying currently recording
-    window_end = min((datetime.now() - relativedelta(hours=1)), window_end)
-
-    matched_file_start_dt_str, seek_time = url_logic_start_time(api, channel, start_time, stream)
-
-    params = {
-        "port":    port,
-        "app":     "bcs",
-        "stream":  "playback.bcs",
-        "channel": channel if channel else api.channel,
-        "type":    1,
-        "start":   matched_file_start_dt_str,
-        "seek":    seek_time,
-        "token":   api.token
-        }
-
-    url_params = urlencode(params)
-
-    url_stream = f"http://{api.host}/flv?{url_params}"
-    logger.info(f"Got URL : {url_stream}")
-
-    return url_stream
+FetchTask = namedtuple("FetchTask", "filename, seek, duration")
 
 
-def url_logic_start_time(api, channel, start_time, stream) -> Tuple[str, int]:
-    """
-    Get the filename and seektime that matches a start_time
-
-    Parameters
-    ----------
-    api
-    channel
-    start_time
-    stream
-
-    Returns
-    -------
-
-    """
-    # Determine a window for querying files that meet specified start_time
-    recordings = query_window(api, channel, start_time, stream)
-    if not recordings:
-        raise Exception(f"No Recordings Match Found for {start_time}")
-    responses = cast(List[SearchResponse], recordings)
-    rec_files = [file for rfiles in [r.files for r in responses] for file in rfiles]  # Flatten
-    matched_file = next((f for f in rec_files if start_time in f), None)
-    if not matched_file:
-        raise Exception(f"No Recordings Match Found for {start_time}")
-    seek_time = math.floor((start_time - matched_file.StartTime.dt).total_seconds())
-    matched_file_start_dt_str = dt_string(matched_file.PlaybackTime.dt)
-    return matched_file_start_dt_str, seek_time
-
-
-def query_window(api, channel, start_time, stream):
+def query_window(api: Api, start_time: datetime, stream: STREAM_TYPES, channel: Optional[int] = None,
+                 window_hours: int = 4) -> Union[None, List[SearchResponse]]:
     """
     Run a query with window
 
     Parameters
     ----------
     api
-    channel
     start_time
     stream
+    channel : int, optional
+        Channel to search. If `None` defaults to `api.channel`
+    window_hours : int
+        Number of hours to search before and after start_time
 
     Returns
     -------
 
     """
-    window_start = start_time - relativedelta(hours=4)
-    window_end = start_time + relativedelta(hours=4)
+    window_start = start_time - relativedelta(hours=window_hours)
+    window_end = start_time + relativedelta(hours=window_hours)
     # Future dates will cause error
     # It also seems to throw an error when querying currently recording
     window_end = min((datetime.now() - relativedelta(hours=1)), window_end)
-    recordings = asyncio.run(api.query_recordings(window_start, window_end, channel=channel, stream=stream))
+    recordings = asyncio.run(api.query_recordings(window_start, window_end, channel=channel if channel else api.channel,
+                                                  stream=stream))
     return recordings
 
 
-def url_logic_duration(api, channel, start_time, duration_secs, stream):
+def build_fetch_tasks(api: Api, start_time: datetime, duration_secs: int, stream: STREAM_TYPES, pad_secs: int = 5,
+                      channel: Optional[int] = None, **window_kwargs) -> List[FetchTask]:
     """
     Get the filename(s) and seektimes that matches a start_time and duration
 
@@ -136,74 +58,90 @@ def url_logic_duration(api, channel, start_time, duration_secs, stream):
     start_time
     duration_secs
     stream
+    pad_secs
+    window_kwargs
+        Passed to `query_window`
 
     Returns
     -------
 
     """
 
-    recordings = query_window(api, channel, start_time, stream)
+    recordings = query_window(api, start_time, stream, channel, **window_kwargs)
     if not recordings:
         raise Exception(f"No Recordings Match Found for {start_time}")
     responses = cast(List[SearchResponse], recordings)
     rec_files = [file for rfiles in [r.files for r in responses] for file in rfiles]  # Flatten
-    rec_files.sort(key=lambda x: x.StartTime.dt)
+    rec_files = sorted(rec_files, key=lambda x: x.StartTime.dt)
+
+    pad_start_time: datetime = (start_time - relativedelta(seconds=pad_secs))
+    end_time = pad_start_time + relativedelta(seconds=duration_secs)
+
+    def dt_range(x, y):
+        return range(int(x.timestamp()), int(y.timestamp()))
+
+    target_range = dt_range(pad_start_time, end_time)
+
+    timestamps = {}
+    for f in rec_files:
+        ts_range = dt_range(f.StartTime.dt, f.EndTime.dt)
+        timestamps[ts_range] = f
+
+    fully_covered = next((f for f in timestamps.keys() if target_range in f), None)
+
+    if fully_covered:
+        file = timestamps[fully_covered]
+        filename = dt_string(file.PlaybackTime.dt)
+        seek = target_range.start - fully_covered.start
+        duration = duration_secs
+        return [FetchTask(filename, seek, duration)]
+
+    tasks = []
+    cursor = target_range.start
+    for file_ts_range, file in timestamps.items():
+        # Seconds that can conribute to requested
+
+        if cursor in file_ts_range:
+            cursor_start_abs = cursor
+            cursor_start_rel = cursor_start_abs - file_ts_range.start
+            cursor_end_rel = min([
+                (file_ts_range.stop - 1 - file_ts_range.start),
+                (target_range.stop - 1 - file_ts_range.start)
+                ])
+
+            filename = dt_string(file.PlaybackTime.dt)
+
+            tasks.append(FetchTask(filename, cursor_start_rel, (cursor_end_rel - cursor_start_rel)))
+            cursor += (cursor_end_rel + 1)
+            if cursor >= target_range.stop:
+                return tasks
+
+    return tasks
 
 
-
-def save_stream(api: Api, start_time: datetime, duration_secs: int, fp: str, padding_secs: int = 5, port: int = 1935,
-                channel: Optional[int] = None,
-                stream: Optional[STREAM_TYPES] = 'sub'):
+def save_stream_recording(api: Api, start_time: datetime, duration_secs: int, fp: str, padding_secs: int = 5,
+                          port: int = 1935, channel: Optional[int] = None, stream: Optional[STREAM_TYPES] = 'sub'):
     """
-    Saves a stream with FFMpeg
-
+    Saves a previously recorded stream with FFMpeg
 
     Parameters
     ----------
     api
     start_time
     duration_secs
-    fp
+    fp : str
+        Path to save to
     padding_secs : int
-        Number of seconds
-    port
-    channel
+        Number of seconds to prepend to recording
+    port : int, default 1935
+    channel : int, optional
     stream
-    fp
 
     Returns
     -------
     """
 
-    # We also need to handle cases where durations may cause files to be split
-    _, rec_files = get_stream(api=api, start_time=start_time, stream=stream)
-
-    # True start time adjusted for padding
-    pad_start_time = start_time - relativedelta(seconds=padding_secs)
-    end_time = start_time + relativedelta(seconds=duration_secs)
-
-    rec_files = sorted(rec_files, key=lambda x: x.StartTime.dt)
-
-    duration_timer = pad_start_time
-    duration_remain = duration_secs
-
-    tasks = []
-
-    for file in rec_files:
-        # Seconds that can conribute to requested
-        if file.EndTime.dt < pad_start_time:
-            continue
-        if file.StartTime.dt > end_time:
-            continue
-        useable_seconds = math.floor((file.EndTime.dt - pad_start_time).total_seconds())
-        if useable_seconds >= duration_remain:
-            tasks.append((file, duration_timer, duration_remain))
-            break
-        else:
-            tasks.append((file, duration_timer, useable_seconds))
-            duration_timer += relativedelta(seconds=useable_seconds)
-            duration_remain -= useable_seconds
-
+    tasks = build_fetch_tasks(api, start_time, duration_secs, stream, padding_secs, channel)
 
     logger.info(f"Writing {len(tasks)} Video Files")
 
@@ -211,16 +149,17 @@ def save_stream(api: Api, start_time: datetime, duration_secs: int, fp: str, pad
     merge_dir = TemporaryDirectory()
     merge_fp = merge_dir.name
 
-    for i, (file, dtimer, secs) in enumerate(tasks):
-        seek_time = int(round((dtimer - file.StartTime.dt).total_seconds(), 0))
-        stream_url_start_dt = dt_string(file.PlaybackTime.dt)
+    print(f"Tmp Directory : {merge_fp}")
+
+    for i, (filename, seek_time, duration) in enumerate(tasks):
+
         params = {
             "port":    port,
             "app":     "bcs",
             "stream":  "playback.bcs",
             "channel": channel if channel else api.channel,
             "type":    1,
-            "start":   stream_url_start_dt,
+            "start":   filename,
             "seek":    seek_time,
             "token":   api.token
             }
@@ -230,14 +169,21 @@ def save_stream(api: Api, start_time: datetime, duration_secs: int, fp: str, pad
         file_name = f"{i}.mp4"
         full_path = os.path.join(merge_fp, file_name)
 
+        print(f"Getting URL {url_stream}")
+        print(f"Duration : {duration}")
 
-        with subprocess.Popen(['ffmpeg', "-to", str(secs), "-i", url_stream, full_path],
-                              stdout=subprocess.PIPE, stdin=subprocess.PIPE,
+        with subprocess.Popen(['ffmpeg', "-t", str(duration), "-i", url_stream, full_path],
+                              stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.PIPE,
                               shell=False) as p:
             try:
-                result, _ = p.communicate(timeout=secs + 30)
-            except:
-                p.terminate()
+                result, _ = p.communicate(timeout=duration)
+            except subprocess.TimeoutExpired:
+                print("Killing Process")
+                p.kill()
+                result, errs = p.communicate()
+                print(result.decode().strip())
+                print(errs.decode().strip())
+
         print(result.decode().strip())
 
     # rejoin videos
@@ -245,16 +191,14 @@ def save_stream(api: Api, start_time: datetime, duration_secs: int, fp: str, pad
     vidlist_fp = os.path.join(merge_fp, "vidlist.txt")
     with open(vidlist_fp, "w") as vfp:
         for i in range(len(tasks)):
-            vfp.write(f"{i}.mp4")
+            vfp.write(f"file './{i}.mp4'")
             vfp.write("\n")
 
+    print(f"Rejoining Videos")
     with subprocess.Popen(['ffmpeg', '-f', 'concat', '-safe', '0', '-i', vidlist_fp, '-c', 'copy', fp],
-                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False) as p:
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE) as p:
         result, _ = p.communicate()
 
     print(result.decode().strip())
 
     merge_dir.cleanup()
-
-
-
