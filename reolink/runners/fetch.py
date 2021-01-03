@@ -247,7 +247,7 @@ def save_motion_recordings(api: Api, motions: List[MotionRange], output_dir: str
 
     for motion in motions:
         start_time = motion.range.lower - relativedelta(seconds=pad_secs)
-        duration = max(math.floor((motion.range.upper - motion.range.lower).total_seconds()), 5)
+        duration = max(math.floor((motion.range.upper - motion.range.lower).total_seconds()) + pad_secs, 15)
         save_folder = channel2folder[motion.channel_id]
         save_filename = name_recording(motion)
         save_location = os.path.join(save_folder, save_filename)
