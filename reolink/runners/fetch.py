@@ -212,7 +212,7 @@ def save_stream_recording(api: Api, start_time: datetime, duration_secs: int, fp
 
 
 def save_motion_recordings(api: Api, motions: List[MotionRange], output_dir: str, channel_folders: bool = True,
-                           port: int = 1935,
+                           port: int = 1935, pad_secs: int = 15,
                            stream: Optional[STREAM_TYPES] = 'sub'):
     """
     Fetch and Save Recording for MotionRange
@@ -222,6 +222,7 @@ def save_motion_recordings(api: Api, motions: List[MotionRange], output_dir: str
     api
     motions : List[MotionRange]
     port
+    pad_secs : int
     output_dir
     channel_folders: bool
         If True, each channel is saved to a channel specific folder within output_dit
@@ -245,7 +246,7 @@ def save_motion_recordings(api: Api, motions: List[MotionRange], output_dir: str
         return f"{m.channel.name}_{dt_string(m.range.lower)}.mp4"
 
     for motion in motions:
-        start_time = motion.range.lower
+        start_time = motion.range.lower - relativedelta(seconds=pad_secs)
         duration = max(math.floor((motion.range.upper - motion.range.lower).total_seconds()), 5)
         save_folder = channel2folder[motion.channel_id]
         save_filename = name_recording(motion)
