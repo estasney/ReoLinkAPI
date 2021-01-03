@@ -1,5 +1,6 @@
 import asyncio
 import logging.config
+import math
 import os
 import subprocess
 from datetime import datetime
@@ -204,7 +205,8 @@ def save_stream_recording(api: Api, start_time: datetime, duration_secs: int, fp
     merge_dir.cleanup()
 
 
-def save_motion_recordings(api: Api, motions: List[MotionRange], output_dir: str, port: int = 1935,
+def save_motion_recordings(api: Api, motions: List[MotionRange], output_dir: str, channel_folders: bool = True,
+                           port: int = 1935,
                            stream: Optional[STREAM_TYPES] = 'sub'):
     """
     Fetch and Save Recording for MotionRange
@@ -215,10 +217,40 @@ def save_motion_recordings(api: Api, motions: List[MotionRange], output_dir: str
     motions : List[MotionRange]
     port
     output_dir
+    channel_folders: bool
+        If True, each channel is saved to a channel specific folder within output_dit
     stream
 
     Returns
     -------
     """
 
-    
+    # Setup output
+    channels_passed = set([(motion.channel_id, motion.channel.name) for motion in motions])
+    if channel_folders:
+        channel2folder = {chn_id: os.path.join(output_dir, chn_name) for chn_id, chn_name in channels_passed}
+        for folder in channel2folder.values():
+            os.mkdir(folder)
+    else:
+        channel2folder = {chn_id: output_dir for chn_id, _ in channels_passed}
+
+    def name_recording(m: MotionRange):
+        return f"{m.channel.name}_{dt_string(m.range.lower)}.mp4"
+
+    for motion in motions:
+        start_time = motion.range.lower
+        duration = math.floor((motion.range.upper - motion.range.lower).total_seconds())
+        save_folder = channel2folder[motion.channel_id]
+        save_filename = name_recording(motion)
+        save_location = os.path.join(save_folder, save_filename)
+        logger.info(f"Fetching {save_filename}")
+        save_stream_recording(api=api, start_time=start_time, duration_secs=duration, fp=save_location, port=port,
+                              channel=motion.channel_id, stream=stream)
+
+
+
+
+
+
+
+
