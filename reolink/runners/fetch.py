@@ -2,6 +2,7 @@ import asyncio
 import logging.config
 import math
 import os
+import shutil
 import subprocess
 from datetime import datetime
 from typing import Optional, cast, List, Union
@@ -187,7 +188,11 @@ def save_stream_recording(api: Api, start_time: datetime, duration_secs: int, fp
 
         print(result.decode().strip())
 
-    # rejoin videos
+    # rejoin videos if + 1
+    if len(tasks) == 1:
+        shutil.move(os.path.join(merge_fp, "0.mp4"), fp)
+        merge_dir.cleanup()
+        return
 
     vidlist_fp = os.path.join(merge_fp, "vidlist.txt")
     with open(vidlist_fp, "w") as vfp:
