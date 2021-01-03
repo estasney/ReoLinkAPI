@@ -1,16 +1,16 @@
 import asyncio
 import logging.config
-import math
 import os
 import subprocess
-from datetime import datetime, timedelta
-from typing import Optional, cast, List, Tuple, Union
-from urllib.parse import urlparse, urlencode
+from datetime import datetime
+from typing import Optional, cast, List, Union
+from urllib.parse import urlencode
 from tempfile import TemporaryDirectory
 from dateutil.relativedelta import relativedelta
 from collections import namedtuple
 from reolink.camera_api import Api, STREAM_TYPES
-from reolink.utils import SearchResponse, SearchResultFile, dt_string
+from reolink.models import MotionRange
+from reolink.utils import SearchResponse, dt_string
 
 logger = logging.getLogger('fetch')
 
@@ -202,3 +202,23 @@ def save_stream_recording(api: Api, start_time: datetime, duration_secs: int, fp
     print(result.decode().strip())
 
     merge_dir.cleanup()
+
+
+def save_motion_recordings(api: Api, motions: List[MotionRange], output_dir: str, port: int = 1935,
+                           stream: Optional[STREAM_TYPES] = 'sub'):
+    """
+    Fetch and Save Recording for MotionRange
+
+    Parameters
+    ----------
+    api
+    motions : List[MotionRange]
+    port
+    output_dir
+    stream
+
+    Returns
+    -------
+    """
+
+    
