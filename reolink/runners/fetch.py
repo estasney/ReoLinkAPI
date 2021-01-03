@@ -191,6 +191,7 @@ def save_stream_recording(api: Api, start_time: datetime, duration_secs: int, fp
     # rejoin videos if + 1
     if len(tasks) == 1:
         shutil.move(os.path.join(merge_fp, "0.mp4"), fp)
+        print(f"Saving to {fp}")
         merge_dir.cleanup()
         return
 
@@ -245,7 +246,7 @@ def save_motion_recordings(api: Api, motions: List[MotionRange], output_dir: str
 
     for motion in motions:
         start_time = motion.range.lower
-        duration = max(math.floor((motion.range.upper - motion.range.lower).total_seconds()), 1)
+        duration = max(math.floor((motion.range.upper - motion.range.lower).total_seconds()), 5)
         save_folder = channel2folder[motion.channel_id]
         save_filename = name_recording(motion)
         save_location = os.path.join(save_folder, save_filename)
