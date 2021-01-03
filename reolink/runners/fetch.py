@@ -178,7 +178,7 @@ def save_stream_recording(api: Api, start_time: datetime, duration_secs: int, fp
                               stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.PIPE,
                               shell=False) as p:
             try:
-                result, _ = p.communicate(timeout=duration)
+                result, _ = p.communicate(timeout=duration + 15)
             except subprocess.TimeoutExpired:
                 print("Killing Process")
                 p.kill()
