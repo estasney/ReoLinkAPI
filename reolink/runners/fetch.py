@@ -235,7 +235,8 @@ def save_motion_recordings(api: Api, motions: List[MotionRange], output_dir: str
     if channel_folders:
         channel2folder = {chn_id: os.path.join(output_dir, chn_name) for chn_id, chn_name in channels_passed}
         for folder in channel2folder.values():
-            os.mkdir(folder)
+            if not os.path.exists(folder):
+                os.mkdir(folder)
     else:
         channel2folder = {chn_id: output_dir for chn_id, _ in channels_passed}
 
