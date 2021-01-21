@@ -26,7 +26,7 @@ def get_token(host: str, username=None, password=None):
         raise Exception("Credentials Not Found")
 
     api = asyncio.run(setup_api(host, username, password))
-    print(api.token)
+    return api.token
 
 
 if __name__ == '__main__':
@@ -35,5 +35,6 @@ if __name__ == '__main__':
     parser.add_argument("--username", help="Optional. Otherwise REO_USERNAME will be read from .env file")
     parser.add_argument("--password", help="Optional. Otherwise REO_PASSWORD will be read from .env file")
     args = parser.parse_args()
-    get_token(args.host, args.username, args.password)
+    token = get_token(args.host, args.username, args.password)
+    print(token)
 
