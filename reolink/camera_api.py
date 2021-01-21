@@ -143,7 +143,7 @@ class Api:
         param = {"cmd": "Snap", "channel": self.channel if not channel else channel}
         response = await self.send(None, param)
 
-        if response is None or response == b'':
+        if response is None or response == b'' or b'error' in response:
             return None
         return response
 
