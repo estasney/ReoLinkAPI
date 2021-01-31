@@ -18,7 +18,7 @@ AUTHOR = 'Eric Stasney'
 REQUIRES_PYTHON = '>=3.8.0'
 VERSION = '0.0.1'
 
-REQUIRED = ['aiohttp', 'python-dateutil', 'toolz', 'SQLAlchemy']
+REQUIRED = ['aiohttp', 'python-dateutil', 'toolz', 'SQLAlchemy', 'click']
 
 EXTRAS = {}
 
@@ -49,6 +49,10 @@ setup(
     url=URL,
     packages=find_packages(exclude=('tests',)),
     install_requires=REQUIRED,
+    entry_points='''
+    [console_scripts]
+    reolink=reolink.cli:cli
+    ''',
     extras_require=EXTRAS,
     include_package_data=False,
     data_files=[],
