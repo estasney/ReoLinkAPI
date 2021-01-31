@@ -13,7 +13,8 @@ def cli():
 @click.option('-u', '--username', default=None)
 @click.option('-p', '--password', default=None)
 @click.option('-h', "--host", default=None)
-def get_token(username, password, host):
+@click.option('-e', '--env-file', default=None)
+def get_token(username, password, host, env):
     """
     Get token for Reolink API and echo stdout. Credentials can be passed as args, Environment Variables, or .env file.
 
@@ -21,7 +22,10 @@ def get_token(username, password, host):
     password - REO_PASSWORD
     host - REO_HOST
     """
-    dotenv.load_dotenv()
+    if env:
+        dotenv.load_dotenv(env)
+    else:
+        dotenv.load_dotenv()
     username = username if username else os.getenv('REO_USERNAME')
     password = password if password else os.getenv('REO_PASSWORD')
     host = host if host else os.getenv('REO_HOST')
