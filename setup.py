@@ -16,9 +16,9 @@ URL = 'https://github.com/estasney/reolink-api'
 EMAIL = 'estasney@users.noreply.github.com'
 AUTHOR = 'Eric Stasney'
 REQUIRES_PYTHON = '>=3.8.0'
-VERSION = '0.0.1'
+VERSION = '0.0.2'
 
-REQUIRED = ['aiohttp', 'python-dateutil', 'toolz', 'SQLAlchemy', 'click']
+REQUIRED = ['aiohttp', 'python-dateutil', 'toolz', 'SQLAlchemy', 'click', 'Pillow']
 
 EXTRAS = {}
 

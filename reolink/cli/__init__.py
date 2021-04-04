@@ -54,6 +54,36 @@ def get_token(username, password, host, env_file):
 @click.option('-h', "--host", default=None)
 @click.option('-e', '--env-file', default=None)
 def save_snapshot(channel, folder, username, password, host, env_file):
+    """
+    Retrieve a channel's snapshot and save to folder
+
+    Parameters
+    ----------
+    channel : int
+        Channel number
+    folder : str
+        Folder path
+    username : Optional[str]
+    password : Optional[str]
+    host : Optional[str]
+    env_file : Optional[str]
+
+    Returns
+    -------
+    None
+
+    Notes
+    -----
+    Credentials can be passed directly via stdin or with environment variables.
+
+    If environment variables, they should be of form:
+    ```
+    username - REO_USERNAME
+    password - REO_PASSWORD
+    host - REO_HOST
+    ```
+
+    """
     from reolink.camera_api import Api
     from reolink.runners.fetch import save_snapshot as snapshot_saver
     from asyncio import run
