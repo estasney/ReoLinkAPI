@@ -5,7 +5,7 @@ import os
 import shutil
 import subprocess
 from datetime import datetime
-from typing import Optional, cast, List, Union
+from typing import Optional, cast, List, Union, Dict
 from urllib.parse import urlencode
 from tempfile import TemporaryDirectory
 from dateutil.relativedelta import relativedelta
@@ -209,6 +209,33 @@ def save_stream_recording(api: Api, start_time: datetime, duration_secs: int, fp
     print(result.decode().strip())
 
     merge_dir.cleanup()
+
+
+def save_snapshot(api: Api, channel: int, folder: str):
+
+    """
+    Parameters
+    ----------
+    api: Api
+    channel : int
+    folder : str
+    Returns
+    -------
+
+    """
+
+    from io import BytesIO
+    from datetime import datetime
+    from PIL import Image
+    from PIL.JpegImagePlugin import JpegImageFile
+
+    img_bytes = asyncio.run(api.get_snapshot(channel))
+    img_bytes = BytesIO(img_bytes)
+    img: JpegImageFile = Image.open(img_bytes)
+    img_name = f"{datetime.now().timestamp():.0f}.jpg"
+    img_path = os.path.join(folder, img_name)
+    img.save(img_path, quality=90)
+    logger.info(f"Saved Channel {channel} Snapshot to {img_name}")
 
 
 def save_motion_recordings(api: Api, motions: List[MotionRange], output_dir: str, channel_folders: bool = True,

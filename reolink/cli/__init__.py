@@ -38,5 +38,40 @@ def get_token(username, password, host, env_file):
     from reolink.camera_api import Api
     from asyncio import run
     api = Api(host, username, password)
-    run(api.login())
+    print(api)
+    try:
+        run(api.login())
+    except RuntimeWarning:
+        pass
     print(api.token)
+
+
+@cli.command()
+@click.option('-c', '--channel', type=int)
+@click.option('-f', '--folder', type=click.Path(file_okay=False, dir_okay=True))
+@click.option('-u', '--username', default=None)
+@click.option('-p', '--password', default=None)
+@click.option('-h', "--host", default=None)
+@click.option('-e', '--env-file', default=None)
+def save_snapshot(channel, folder, username, password, host, env_file):
+    from reolink.camera_api import Api
+    from reolink.runners.fetch import save_snapshot as snapshot_saver
+    from asyncio import run
+
+    if env_file:
+        dotenv.load_dotenv(env_file)
+    else:
+        dotenv.load_dotenv()
+
+    username = username if username else os.getenv('REO_USERNAME')
+    password = password if password else os.getenv('REO_PASSWORD')
+    host = host if host else os.getenv('REO_HOST')
+
+    if not all([username, password, host]):
+        missing = [param_name for param, param_name in
+                   zip([username, password, host], ['username', 'password', 'host']) if not param]
+        raise Exception(f"Missing Parameters: {', '.join(missing)}")
+
+    api = Api(host, username, password)
+    run(api.login())
+    snapshot_saver(api, channel, folder)
