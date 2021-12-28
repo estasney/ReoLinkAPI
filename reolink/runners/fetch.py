@@ -211,7 +211,7 @@ def save_stream_recording(api: Api, start_time: datetime, duration_secs: int, fp
     merge_dir.cleanup()
 
 
-def save_snapshot(api: Api, channel: int, folder: str):
+def save_snapshot(api: Api, channel: int, folder: str, retries=3):
 
     """
     Parameters
@@ -219,6 +219,8 @@ def save_snapshot(api: Api, channel: int, folder: str):
     api: Api
     channel : int
     folder : str
+    retries : int
+        Max number of retries if image is truncated
     Returns
     -------
 
@@ -228,14 +230,21 @@ def save_snapshot(api: Api, channel: int, folder: str):
     from datetime import datetime
     from PIL import Image
     from PIL.JpegImagePlugin import JpegImageFile
-
-    img_bytes = asyncio.run(api.get_snapshot(channel))
-    img_bytes = BytesIO(img_bytes)
-    img: JpegImageFile = Image.open(img_bytes)
-    img_name = f"{datetime.now().timestamp():.0f}.jpg"
-    img_path = os.path.join(folder, img_name)
-    img.save(img_path, quality=90)
-    logger.info(f"Saved Channel {channel} Snapshot to {img_name}")
+    from typing import cast
+    current_try = 0
+    while current_try < retries:
+        img_bytes = asyncio.run(api.get_snapshot(channel))
+        img_bytes = BytesIO(img_bytes)
+        img = cast(JpegImageFile, Image.open(img_bytes))
+        img_name = f"{datetime.now().timestamp():.0f}.jpg"
+        img_path = os.path.join(folder, img_name)
+        try:
+            img.save(img_path, quality=90)
+            logger.info(f"[Attempt {current_try}] Saved Channel {channel} Snapshot to {img_name}")
+            return
+        except OSError:
+            logger.info(f"[Attempt {current_try}] Saving Channel {channel} Snapshot Failed.")
+            current_try += 1
 
 
 def save_motion_recordings(api: Api, motions: List[MotionRange], output_dir: str, channel_folders: bool = True,
