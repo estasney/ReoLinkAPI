@@ -15,10 +15,10 @@ DESCRIPTION = 'Reolink API'
 URL = 'https://github.com/estasney/reolink-api'
 EMAIL = 'estasney@users.noreply.github.com'
 AUTHOR = 'Eric Stasney'
-REQUIRES_PYTHON = '>=3.8.0'
-VERSION = '0.0.2'
+REQUIRES_PYTHON = '>=3.9.0'
+VERSION = '0.1.0'
 
-REQUIRED = ['aiohttp', 'python-dateutil', 'toolz', 'SQLAlchemy', 'click', 'Pillow']
+REQUIRED = ['aiohttp', 'python-dateutil', 'toolz', 'SQLAlchemy', 'click', 'Pillow', 'Pydantic<2']
 
 EXTRAS = {}
 
@@ -63,7 +63,7 @@ setup(
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.8'
+        'Programming Language :: Python :: 3.9'
     ],
     ext_modules=cythonize(
             Extension("reolink.interval.c_interval", ["reolink/interval/c_interval.pyx"]),

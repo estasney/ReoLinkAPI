@@ -1,6 +1,4 @@
-import os
 import click
-import dotenv
 
 
 @click.group()
@@ -10,35 +8,16 @@ def cli():
 
 
 @cli.command()
-@click.option('-u', '--username', default=None)
-@click.option('-p', '--password', default=None)
-@click.option('-h', "--host", default=None)
 @click.option('-e', '--env-file', default=None)
-def get_token(username, password, host, env_file):
+def get_token(env_file):
     """
-    Get token for Reolink API and echo stdout. Credentials can be passed as args, Environment Variables, or .env file.
-
-    username - REO_USERNAME
-    password - REO_PASSWORD
-    host - REO_HOST
+    Get token for Reolink API and echo stdout. Credentials are provided via environment variables or env file.
     """
-    if env_file:
-        dotenv.load_dotenv(env_file)
-    else:
-        dotenv.load_dotenv()
-    username = username if username else os.getenv('REO_USERNAME')
-    password = password if password else os.getenv('REO_PASSWORD')
-    host = host if host else os.getenv('REO_HOST')
-
-    if not all([username, password, host]):
-        missing = [param_name for param, param_name in
-                   zip([username, password, host], ['username', 'password', 'host']) if not param]
-        raise Exception(f"Missing Parameters: {', '.join(missing)}")
-
+    from reolink.settings import ReolinkApiSettings
     from reolink.camera_api import Api
     from asyncio import run
-    api = Api(host, username, password)
-    print(api)
+    settings = ReolinkApiSettings(_env_file=env_file)
+    api = Api(settings.api_url, settings.username, settings.password.get_secret_value())
     try:
         run(api.login())
     except RuntimeWarning:
@@ -49,11 +28,8 @@ def get_token(username, password, host, env_file):
 @cli.command()
 @click.option('-c', '--channel', type=int)
 @click.option('-f', '--folder', type=click.Path(file_okay=False, dir_okay=True))
-@click.option('-u', '--username', default=None)
-@click.option('-p', '--password', default=None)
-@click.option('-h', "--host", default=None)
 @click.option('-e', '--env-file', default=None)
-def save_snapshot(channel, folder, username, password, host, env_file):
+def save_snapshot(channel, folder, env_file):
     """
     Retrieve a channel's snapshot and save to folder
 
@@ -63,9 +39,6 @@ def save_snapshot(channel, folder, username, password, host, env_file):
         Channel number
     folder : str
         Folder path
-    username : Optional[str]
-    password : Optional[str]
-    host : Optional[str]
     env_file : Optional[str]
 
     Returns
@@ -78,30 +51,15 @@ def save_snapshot(channel, folder, username, password, host, env_file):
 
     If environment variables, they should be of form:
     ```
-    username - REO_USERNAME
-    password - REO_PASSWORD
-    host - REO_HOST
     ```
 
     """
     from reolink.camera_api import Api
     from reolink.runners.fetch import save_snapshot as snapshot_saver
     from asyncio import run
+    from reolink.settings import ReolinkApiSettings
 
-    if env_file:
-        dotenv.load_dotenv(env_file)
-    else:
-        dotenv.load_dotenv()
-
-    username = username if username else os.getenv('REO_USERNAME')
-    password = password if password else os.getenv('REO_PASSWORD')
-    host = host if host else os.getenv('REO_HOST')
-
-    if not all([username, password, host]):
-        missing = [param_name for param, param_name in
-                   zip([username, password, host], ['username', 'password', 'host']) if not param]
-        raise Exception(f"Missing Parameters: {', '.join(missing)}")
-
-    api = Api(host, username, password)
+    settings = ReolinkApiSettings(_env_file=env_file)
+    api = Api(settings.api_url, settings.username, settings.password.get_secret_value())
     run(api.login())
     snapshot_saver(api, channel, folder)

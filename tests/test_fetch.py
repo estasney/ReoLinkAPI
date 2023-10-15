@@ -1,34 +1,26 @@
+from io import BytesIO
+
+import PIL.Image
+import pytest
+
 from reolink.camera_api import Api
-from reolink.runners.fetch import get_stream, save_stream
-from datetime import datetime
-from dateutil.relativedelta import relativedelta
-import keyring
-import asyncio
-import subprocess
 
 
-def test_fetch(offset_hours, padding_sec=5):
-    api = Api("10.1.0.120", "dev", keyring.get_password("REOLINK", "dev"), stream='sub')
-    asyncio.run(api.login())
-    s = datetime.now() - relativedelta(hours=offset_hours)
-    print(f"Getting Playback at {s.strftime('%m/%d %I:%M:%S %p')}")
-
-    s = s - relativedelta(seconds=padding_sec)
-    url, _ = get_stream(api, s, stream='sub')
+@pytest.fixture()
+def settings():
+    from reolink.settings import ReolinkApiSettings
+    return ReolinkApiSettings(_env_file='../.env')
 
 
-    with subprocess.Popen(['ffplay', url], stdout=subprocess.PIPE, stdin=subprocess.PIPE, shell=False) as p:
-        result, _ = p.communicate()
-    print(result.decode().strip())
+@pytest.mark.parametrize("channel", [0, 1, 2, 3])
+@pytest.mark.asyncio
+async def test_get_snapshot(channel, settings):
+    api = Api(host=settings.api_url, username=settings.username, password=settings.password.get_secret_value(), stream='sub')
+    await api.login()
+    snapshot_data = await api.get_snapshot(channel)
+    assert snapshot_data is not None
+    fp = BytesIO(snapshot_data)
+    img = PIL.Image.open(fp)
+    img.show()
 
-def test_offset_fetch(offset_hours, padding_sec=5):
-    api = Api("10.1.0.120", "dev", keyring.get_password("REOLINK", "dev"), stream='sub')
-    asyncio.run(api.login())
-    s = datetime.now() - relativedelta(hours=offset_hours)
-    s = datetime(year=s.year, month=s.month, day=s.day, hour=s.hour, minute=59, second=0)
-    print(f"Getting Playback at {s.strftime('%m/%d %I:%M:%S %p')}")
 
-    s = s - relativedelta(seconds=padding_sec)
-    tasks = save_stream(api, s, stream='sub', fp='/home/eric/Downloads/testoffset.mp4', duration_secs=600)
-
-    print(tasks)
