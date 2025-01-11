@@ -2,17 +2,18 @@ import asyncio
 import logging
 import logging.config
 import sys
-from datetime import datetime
-from typing import List, Tuple
-from reolink.common import AuthenticationError
-from reolink.models import Channel, get_session, Session
-from reolink.camera_api import Api
 
-logger = logging.getLogger('detect')
+from reolink.camera_api import Api
+from reolink.common import AuthenticationError
+from reolink.models import Channel, Session, get_session
+
+logger = logging.getLogger("detect")
 # logging.config.fileConfig('logging.conf')
 
 
-async def poll_channel(channel: Channel, api: Api, session: Session, force_store: bool = False):
+async def poll_channel(
+    channel: Channel, api: Api, session: Session, force_store: bool = False
+):
     """
     Poll a channel for it's Motion Detection state. Passes value to channel to conditionally store
 
@@ -43,7 +44,7 @@ async def poll_channel(channel: Channel, api: Api, session: Session, force_store
     return state_changed
 
 
-def setup_channels(session: Session, channels: List[Tuple[int, str]]):
+def setup_channels(session: Session, channels: list[tuple[int, str]]):
     db_channels = []
     for channel_number, channel_name in channels:
         db_channel = session.query(Channel).get(channel_number)
@@ -62,12 +63,17 @@ async def setup_api(host: str, username: str, password: str) -> Api:
     return api
 
 
-async def poll_channels(session: Session, api: Api, channels: List[Channel], force_store: bool = False,
-                        wait_time: int = 1):
+async def poll_channels(
+    session: Session,
+    api: Api,
+    channels: list[Channel],
+    force_store: bool = False,
+    wait_time: int = 1,
+):
     try:
         state_changes = await asyncio.gather(
-                *[poll_channel(channel, api, session, force_store) for channel in channels]
-                )
+            *[poll_channel(channel, api, session, force_store) for channel in channels]
+        )
         if any(state_changes):
             session.commit()
         await asyncio.sleep(wait_time)
@@ -76,7 +82,13 @@ async def poll_channels(session: Session, api: Api, channels: List[Channel], for
         raise auth_error
 
 
-def run_detect(host: str, username: str, password: str, db_uri: str, channels: List[Tuple[int, str]]):
+def run_detect(
+    host: str,
+    username: str,
+    password: str,
+    db_uri: str,
+    channels: list[tuple[int, str]],
+):
     """
 
     Parameters
@@ -104,5 +116,5 @@ def run_detect(host: str, username: str, password: str, db_uri: str, channels: L
             logger.warning("Re-Authenticating")
             api = asyncio.run(setup_api(host, username, password))
         except Exception as e:
-            logger.exception(f"Got Exception: {str(e)}")
+            logger.exception(f"Got Exception: {e!s}")
             sys.exit(1)

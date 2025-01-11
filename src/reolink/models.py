@@ -1,12 +1,12 @@
 from datetime import datetime, timedelta
+
 from psycopg2.extras import DateTimeRange
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
-from sqlalchemy import create_engine
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, create_engine
+from sqlalchemy.dialects.postgresql import TSRANGE
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship, sessionmaker
-from sqlalchemy.dialects.postgresql import TSRANGE
-from sqlalchemy.sql.expression import func, extract
+from sqlalchemy.sql.expression import extract, func
 
 Base = declarative_base()
 Session = sessionmaker()
@@ -21,10 +21,10 @@ def get_session(db_url) -> Session:
 
 
 class MotionRange(Base):
-    __tablename__ = 'motionranges'
+    __tablename__ = "motionranges"
 
     id = Column(Integer, primary_key=True)
-    channel_id = Column(Integer, ForeignKey('channels.id'))
+    channel_id = Column(Integer, ForeignKey("channels.id"))
     channel = relationship("Channel", back_populates="motions")
     range = Column(TSRANGE())
 
@@ -35,7 +35,7 @@ class MotionRange(Base):
     @seconds.expression
     def seconds(cls):
         intv = func.upper(cls.range) - func.lower(cls.range)
-        return extract('epoch', intv)
+        return extract("epoch", intv)
 
     @classmethod
     def _td(cls, td: timedelta):
@@ -53,22 +53,26 @@ class MotionRange(Base):
             s2 = self.range.upper.strftime("%m/%d %I:%M:%S %p")
         else:
             s2 = " ? "
-        if isinstance(self.range.lower, datetime) and isinstance(self.range.upper, datetime):
-            td = MotionRange._td((self.range.upper - self.range.lower))
+        if isinstance(self.range.lower, datetime) and isinstance(
+            self.range.upper, datetime
+        ):
+            td = MotionRange._td(self.range.upper - self.range.lower)
         else:
             td = "?"
         return f"<Channel {self.channel_id}> : [{td}]  ({s1} - {s2})"
 
 
 class Channel(Base):
-    __tablename__ = 'channels'
+    __tablename__ = "channels"
 
     id = Column(Integer, primary_key=True, autoincrement=False)
     name = Column(String(128))
     motion_started = Column(DateTime, nullable=True, default=None)
     motions = relationship("MotionRange", back_populates="channel")
 
-    def handle_detection(self, detection: bool, session: Session, force_new: bool = False):
+    def handle_detection(
+        self, detection: bool, session: Session, force_new: bool = False
+    ):
         """
         Passed a boolean, handles tracking state with MotionInterval.
 
@@ -98,18 +102,15 @@ class Channel(Base):
             self.motion_started = datetime.now()
             changed = True
             return changed
-        elif self.motion_started is None and not detection:
+        if (self.motion_started is None and not detection) or (self.motion_started is not None and detection):
             return changed
-        elif self.motion_started is not None and detection:
-            return changed
-        elif self.motion_started is not None and not detection:
-
-            md_interval = MotionRange(channel_id=self.id,
-                                      range=DateTimeRange(self.motion_started, datetime.now()))
+        if self.motion_started is not None and not detection:
+            md_interval = MotionRange(
+                channel_id=self.id,
+                range=DateTimeRange(self.motion_started, datetime.now()),
+            )
             session.add(md_interval)
             self.motion_started = None
             changed = True
             return changed
-        else:
-            raise Exception("Logic Error")
-
+        raise Exception("Logic Error")

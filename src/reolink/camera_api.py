@@ -4,16 +4,17 @@ Reolink Camera API
 Extended from https://github.com/fwestenberg/reolink
 
 """
+
 import json
 import logging
 from datetime import datetime, timedelta
-from typing import Optional, Union, List, TypedDict, Literal
+from typing import Literal, TypedDict
 
 import aiohttp
 from dateutil.relativedelta import relativedelta
 
-from reolink.utils import SearchResponse
 from reolink.common import AuthenticationError
+from reolink.utils import SearchResponse
 
 MANUFACTURER = "Reolink"
 DEFAULT_STREAM = "main"
@@ -21,26 +22,34 @@ DEFAULT_PROTOCOL = "rtmp"
 
 logger = logging.getLogger(__name__)
 
-STREAM_TYPES = Literal['main', 'sub']
+STREAM_TYPES = Literal["main", "sub"]
 
 
 class DTOffset(TypedDict):
-    years: Optional[int]
-    months: Optional[int]
-    days: Optional[int]
-    leapdays: Optional[int]
-    weeks: Optional[int]
-    hours: Optional[int]
-    minutes: Optional[int]
-    seconds: Optional[int]
-    microseconds: Optional[int]
+    years: int | None
+    months: int | None
+    days: int | None
+    leapdays: int | None
+    weeks: int | None
+    hours: int | None
+    minutes: int | None
+    seconds: int | None
+    microseconds: int | None
 
 
 class Api:
     """Reolink API class."""
 
-    def __init__(self, host: str, username: str, password: str, port: int = 80, channel: int = 0, timeout: int = 10,
-                 stream: STREAM_TYPES = DEFAULT_STREAM):
+    def __init__(
+        self,
+        host: str,
+        username: str,
+        password: str,
+        port: int = 80,
+        channel: int = 0,
+        timeout: int = 10,
+        stream: STREAM_TYPES = DEFAULT_STREAM,
+    ):
         """
 
         Parameters
@@ -84,7 +93,7 @@ class Api:
         self.token = None
         self.lease_time = None
 
-    async def get_motion_state(self, channel: Optional[int] = None) -> bool:
+    async def get_motion_state(self, channel: int | None = None) -> bool:
         """
         Fetch the motion state
 
@@ -102,11 +111,13 @@ class Api:
         AuthenticationError
 
         """
-        body = [{
-            "cmd": "GetMdState", "action": 0, "param": {
-                "channel": self.channel if not channel else channel
-                }
-            }]
+        body = [
+            {
+                "cmd": "GetMdState",
+                "action": 0,
+                "param": {"channel": self.channel if not channel else channel},
+            }
+        ]
 
         response = await self.send(body)
 
@@ -115,7 +126,8 @@ class Api:
 
             if json_data is None:
                 logger.error(
-                        "Unable to get Motion detection state at IP {}".format(self.host))
+                    f"Unable to get Motion detection state at IP {self.host}"
+                )
                 return False
             try:
                 return json_data[0]["value"]["state"] == 1
@@ -126,7 +138,7 @@ class Api:
             self.clear_token()
             return False
 
-    async def get_snapshot(self, channel: Optional[int] = None) -> Optional[bytes]:
+    async def get_snapshot(self, channel: int | None = None) -> bytes | None:
         """
         Get snapshot image
 
@@ -143,7 +155,7 @@ class Api:
         param = {"cmd": "Snap", "channel": self.channel if not channel else channel}
         response = await self.send(None, param)
 
-        if response is None or response == b'' or b'error' in response:
+        if response is None or response == b"" or b"error" in response:
             return None
         return response
 
@@ -153,24 +165,24 @@ class Api:
             return True
 
         logger.debug(
-                "Reolink camera with host {}:{} trying to login with user {}".format(self.host, self.port,
-                                                                                     self.username))
+            f"Reolink camera with host {self.host}:{self.port} trying to login with user {self.username}"
+        )
         body = [
             {
-                "cmd":    "Login",
+                "cmd": "Login",
                 "action": 0,
-                "param":  {
+                "param": {
                     "User": {"userName": self.username, "password": self.password}
-                    },
-                }
-            ]
+                },
+            }
+        ]
         param = {"cmd": "Login", "token": "null"}
 
         response = await self.send(body, param)
 
         try:
             json_data = json.loads(response)
-            logger.debug("Got response from {}: {}".format(self.host, json_data))
+            logger.debug(f"Got response from {self.host}: {json_data}")
         except (TypeError, json.JSONDecodeError):
             logger.error("Error translating login response to json")
             return False
@@ -186,7 +198,7 @@ class Api:
                 logger.error("JSON structure from login response not recognized")
                 return False
 
-        logger.error("Failed to login at IP {}. Connection error.".format(self.host))
+        logger.error(f"Failed to login at IP {self.host}. Connection error.")
         return False
 
     async def logout(self):
@@ -197,7 +209,7 @@ class Api:
         await self.send(body, param)
         self.clear_token()
 
-    async def send(self, body, param=None) -> Union[bool, str, bytes]:
+    async def send(self, body, param=None) -> bool | str | bytes:
         """Generic send method."""
         if body is None or (body[0]["cmd"] != "Login" and body[0]["cmd"] != "Logout"):
             if not await self.login():
@@ -216,16 +228,20 @@ class Api:
             else:
                 async with aiohttp.ClientSession(timeout=self.timeout) as session:
                     async with session.post(
-                            url=self.url, json=body, params=param
-                            ) as response:
+                        url=self.url, json=body, params=param
+                    ) as response:
                         json_data = await response.text()
                         return json_data
         except:  # pylint: disable=bare-except
             return False
 
-    async def query_recordings(self, start_time: datetime, end_time: Union[DTOffset, datetime],
-                               channel: Optional[int] = None, stream: Optional[STREAM_TYPES] = None) -> Union[
-        None, List[SearchResponse]]:
+    async def query_recordings(
+        self,
+        start_time: datetime,
+        end_time: DTOffset | datetime,
+        channel: int | None = None,
+        stream: STREAM_TYPES | None = None,
+    ) -> None | list[SearchResponse]:
         """
         Query Recordings
 
@@ -245,40 +261,45 @@ class Api:
 
         """
 
-        params = {"cmd": "Search", "rs": self.token, "user": self.username, "password": self.password}
+        params = {
+            "cmd": "Search",
+            "rs": self.token,
+            "user": self.username,
+            "password": self.password,
+        }
 
         if isinstance(end_time, dict):
             end_time = start_time + relativedelta(**end_time)
 
         body = [
             {
-                "cmd":    "Search",
+                "cmd": "Search",
                 "action": 1,
-                "param":  {
+                "param": {
                     "Search": {
-                        "channel":    self.channel if not channel else channel,
+                        "channel": channel if channel is not None else self.channel,
                         "onlyStatus": 0,
-                        "streamType": self.stream if not stream else stream,
-                        "StartTime":  {
+                        "streamType": stream if stream else self.stream,
+                        "StartTime": {
                             "year": start_time.year,
-                            "mon":  start_time.month,
-                            "day":  start_time.day,
+                            "mon": start_time.month,
+                            "day": start_time.day,
                             "hour": start_time.hour,
-                            "min":  start_time.minute,
-                            "sec":  start_time.second
-                            },
-                        "EndTime":    {
+                            "min": start_time.minute,
+                            "sec": start_time.second,
+                        },
+                        "EndTime": {
                             "year": end_time.year,
-                            "mon":  end_time.month,
-                            "day":  end_time.day,
+                            "mon": end_time.month,
+                            "day": end_time.day,
                             "hour": end_time.hour,
-                            "min":  end_time.minute,
-                            "sec":  end_time.second
-                            }
-                        }
+                            "min": end_time.minute,
+                            "sec": end_time.second,
+                        },
                     }
-                }
-            ]
+                },
+            }
+        ]
 
         async with aiohttp.ClientSession(timeout=self.timeout) as session:
             async with session.post(url=self.url, json=body, params=params) as response:

@@ -4,23 +4,30 @@ import math
 import os
 import shutil
 import subprocess
-from datetime import datetime
-from typing import Optional, cast, List, Union, Dict
-from urllib.parse import urlencode
-from tempfile import TemporaryDirectory
-from dateutil.relativedelta import relativedelta
 from collections import namedtuple
-from reolink.camera_api import Api, STREAM_TYPES
+from datetime import datetime
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from urllib.parse import urlencode
+
+from dateutil.relativedelta import relativedelta
+
+from reolink.camera_api import STREAM_TYPES, Api
 from reolink.models import MotionRange
 from reolink.utils import SearchResponse, dt_string
 
-logger = logging.getLogger('fetch')
+logger = logging.getLogger(__name__)
 
 FetchTask = namedtuple("FetchTask", "filename, seek, duration")
 
 
-def query_window(api: Api, start_time: datetime, stream: STREAM_TYPES, channel: Optional[int] = None,
-                 window_hours: int = 4) -> Union[None, List[SearchResponse]]:
+def query_window(
+    api: Api,
+    start_time: datetime,
+    stream: STREAM_TYPES,
+    channel: int | None = None,
+    window_hours: int = 4,
+) -> list[SearchResponse] | None:
     """
     Run a query with window
 
@@ -43,13 +50,26 @@ def query_window(api: Api, start_time: datetime, stream: STREAM_TYPES, channel: 
     # Future dates will cause error
     # It also seems to throw an error when querying currently recording
     window_end = min((datetime.now() - relativedelta(hours=1)), window_end)
-    recordings = asyncio.run(api.query_recordings(window_start, window_end, channel=channel if channel else api.channel,
-                                                  stream=stream))
+    recordings = asyncio.run(
+        api.query_recordings(
+            window_start,
+            window_end,
+            channel=channel if channel else api.channel,
+            stream=stream,
+        )
+    )
     return recordings
 
 
-def build_fetch_tasks(api: Api, start_time: datetime, duration_secs: int, stream: STREAM_TYPES, pad_secs: int = 5,
-                      channel: Optional[int] = None, **window_kwargs) -> List[FetchTask]:
+def build_fetch_tasks(
+    api: Api,
+    start_time: datetime,
+    duration_secs: int,
+    stream: STREAM_TYPES,
+    pad_secs: int = 5,
+    channel: int | None = None,
+    **window_kwargs,
+) -> list[FetchTask]:
     """
     Get the filename(s) and seektimes that matches a start_time and duration
 
@@ -71,12 +91,15 @@ def build_fetch_tasks(api: Api, start_time: datetime, duration_secs: int, stream
 
     recordings = query_window(api, start_time, stream, channel, **window_kwargs)
     if not recordings:
-        raise Exception(f"No Recordings Match Found for {start_time}")
-    responses = cast(List[SearchResponse], recordings)
-    rec_files = [file for rfiles in [r.files for r in responses] for file in rfiles]  # Flatten
+        msg = f"No Recordings Match Found for {start_time}"
+        raise Exception(msg)
+
+    rec_files = [
+        file for rfiles in [r.files for r in recordings] for file in rfiles
+    ]  # Flatten
     rec_files = sorted(rec_files, key=lambda x: x.StartTime.dt)
 
-    pad_start_time: datetime = (start_time - relativedelta(seconds=pad_secs))
+    pad_start_time: datetime = start_time - relativedelta(seconds=pad_secs)
     end_time = pad_start_time + relativedelta(seconds=duration_secs)
 
     def dt_range(x, y):
@@ -89,7 +112,7 @@ def build_fetch_tasks(api: Api, start_time: datetime, duration_secs: int, stream
         ts_range = dt_range(f.StartTime.dt, f.EndTime.dt)
         timestamps[ts_range] = f
 
-    fully_covered = next((f for f in timestamps.keys() if target_range in f), None)
+    fully_covered = next((f for f in timestamps if target_range in f), None)
 
     if fully_covered:
         file = timestamps[fully_covered]
@@ -101,28 +124,42 @@ def build_fetch_tasks(api: Api, start_time: datetime, duration_secs: int, stream
     tasks = []
     cursor = target_range.start
     for file_ts_range, file in timestamps.items():
-        # Seconds that can conribute to requested
+        # Seconds that can contribute to requested
 
         if cursor in file_ts_range:
             cursor_start_abs = cursor
             cursor_start_rel = cursor_start_abs - file_ts_range.start
-            cursor_end_rel = min([
-                (file_ts_range.stop - 1 - file_ts_range.start),
-                (target_range.stop - 1 - file_ts_range.start)
-                ])
+            cursor_end_rel = min(
+                [
+                    (file_ts_range.stop - 1 - file_ts_range.start),
+                    (target_range.stop - 1 - file_ts_range.start),
+                ]
+            )
 
             filename = dt_string(file.PlaybackTime.dt)
 
-            tasks.append(FetchTask(filename, cursor_start_rel, (cursor_end_rel - cursor_start_rel)))
-            cursor += (cursor_end_rel + 1)
+            tasks.append(
+                FetchTask(
+                    filename, cursor_start_rel, (cursor_end_rel - cursor_start_rel)
+                )
+            )
+            cursor += cursor_end_rel + 1
             if cursor >= target_range.stop:
                 return tasks
 
     return tasks
 
 
-def save_stream_recording(api: Api, start_time: datetime, duration_secs: int, fp: str, padding_secs: int = 5,
-                          port: int = 1935, channel: Optional[int] = None, stream: Optional[STREAM_TYPES] = 'sub'):
+def save_stream_recording(
+    api: Api,
+    start_time: datetime,
+    duration_secs: int,
+    fp: str,
+    padding_secs: int = 5,
+    port: int = 1935,
+    channel: int | None = None,
+    stream: STREAM_TYPES = "sub",
+):
     """
     Saves a previously recorded stream with FFMpeg
 
@@ -143,40 +180,45 @@ def save_stream_recording(api: Api, start_time: datetime, duration_secs: int, fp
     -------
     """
 
-    tasks = build_fetch_tasks(api, start_time, duration_secs, stream, padding_secs, channel)
+    tasks = build_fetch_tasks(
+        api, start_time, duration_secs, stream, padding_secs, channel
+    )
 
-    logger.info(f"Writing {len(tasks)} Video Files")
+    logger.info("Writing %d Video Files", len(tasks))
 
     # store in tempdir
     merge_dir = TemporaryDirectory()
     merge_fp = merge_dir.name
 
-    print(f"Tmp Directory : {merge_fp}")
+    logging.debug("Tmp Directory : %s", merge_fp)
 
     for i, (filename, seek_time, duration) in enumerate(tasks):
-
         params = {
-            "port":    port,
-            "app":     "bcs",
-            "stream":  "playback.bcs",
+            "port": port,
+            "app": "bcs",
+            "stream": "playback.bcs",
             "channel": channel if channel else api.channel,
-            "type":    1,
-            "start":   filename,
-            "seek":    seek_time,
-            "token":   api.token
-            }
+            "type": 1,
+            "start": filename,
+            "seek": seek_time,
+            "token": api.token,
+        }
 
         url_params = urlencode(params)
         url_stream = f"http://{api.host}/flv?{url_params}"
         file_name = f"{i}.mp4"
         full_path = os.path.join(merge_fp, file_name)
 
-        print(f"Getting URL {url_stream}")
-        print(f"Duration : {duration}")
+        logger.info("Getting URL %s", url_stream)
+        logger.debug("Duration : %d", duration)
 
-        with subprocess.Popen(['ffmpeg', "-t", str(duration), "-i", url_stream, full_path],
-                              stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.PIPE,
-                              shell=False) as p:
+        with subprocess.Popen(
+            ["ffmpeg", "-t", str(duration), "-i", url_stream, full_path],
+            stdout=subprocess.PIPE,
+            stdin=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            shell=False,
+        ) as p:
             try:
                 result, _ = p.communicate(timeout=duration + 15)
             except subprocess.TimeoutExpired:
@@ -201,9 +243,13 @@ def save_stream_recording(api: Api, start_time: datetime, duration_secs: int, fp
             vfp.write(f"file './{i}.mp4'")
             vfp.write("\n")
 
-    print(f"Rejoining Videos")
-    with subprocess.Popen(['ffmpeg', '-f', 'concat', '-safe', '0', '-i', vidlist_fp, '-c', 'copy', fp],
-                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE) as p:
+    print("Rejoining Videos")
+    with subprocess.Popen(
+        ["ffmpeg", "-f", "concat", "-safe", "0", "-i", vidlist_fp, "-c", "copy", fp],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        stdin=subprocess.PIPE,
+    ) as p:
         result, _ = p.communicate()
 
     print(result.decode().strip())
@@ -211,8 +257,7 @@ def save_stream_recording(api: Api, start_time: datetime, duration_secs: int, fp
     merge_dir.cleanup()
 
 
-def save_snapshot(api: Api, channel: int, folder: str, retries=3):
-
+def save_snapshot(api: Api, channel: int, folder: str, retries: int = 3):
     """
     Parameters
     ----------
@@ -226,11 +271,13 @@ def save_snapshot(api: Api, channel: int, folder: str, retries=3):
 
     """
 
-    from io import BytesIO
     from datetime import datetime
+    from io import BytesIO
+    from typing import cast
+
     from PIL import Image
     from PIL.JpegImagePlugin import JpegImageFile
-    from typing import cast
+
     current_try = 0
     while current_try < retries:
         img_bytes = asyncio.run(api.get_snapshot(channel))
@@ -240,16 +287,27 @@ def save_snapshot(api: Api, channel: int, folder: str, retries=3):
         img_path = os.path.join(folder, img_name)
         try:
             img.save(img_path, quality=90)
-            logger.info(f"[Attempt {current_try}] Saved Channel {channel} Snapshot to {img_name}")
-            return
+            logger.info(
+                f"[Attempt {current_try}] Saved Channel {channel} Snapshot to {img_name}"
+            )
         except OSError:
-            logger.info(f"[Attempt {current_try}] Saving Channel {channel} Snapshot Failed.")
+            logger.info(
+                f"[Attempt {current_try}] Saving Channel {channel} Snapshot Failed."
+            )
             current_try += 1
+        else:
+            return
 
 
-def save_motion_recordings(api: Api, motions: List[MotionRange], output_dir: str, channel_folders: bool = True,
-                           port: int = 1935, pad_secs: int = 15,
-                           stream: Optional[STREAM_TYPES] = 'sub'):
+def save_motion_recordings(
+    api: Api,
+    motions: list[MotionRange],
+    output_dir: str,
+    channel_folders: bool = True,
+    port: int = 1935,
+    pad_secs: int = 15,
+    stream: STREAM_TYPES = "sub",
+) -> None:
     """
     Fetch and Save Recording for MotionRange
 
@@ -267,14 +325,16 @@ def save_motion_recordings(api: Api, motions: List[MotionRange], output_dir: str
     Returns
     -------
     """
+    output_dir = Path(output_dir)
 
     # Setup output
-    channels_passed = set([(motion.channel_id, motion.channel.name) for motion in motions])
+    channels_passed = {(motion.channel_id, motion.channel.name) for motion in motions}
     if channel_folders:
-        channel2folder = {chn_id: os.path.join(output_dir, chn_name) for chn_id, chn_name in channels_passed}
+        channel2folder = {
+            chn_id: (output_dir / chn_name) for chn_id, chn_name in channels_passed
+        }
         for folder in channel2folder.values():
-            if not os.path.exists(folder):
-                os.mkdir(folder)
+            folder.mkdir(exist_ok=True, parents=True)
     else:
         channel2folder = {chn_id: output_dir for chn_id, _ in channels_passed}
 
@@ -283,18 +343,21 @@ def save_motion_recordings(api: Api, motions: List[MotionRange], output_dir: str
 
     for motion in motions:
         start_time = motion.range.lower - relativedelta(seconds=pad_secs)
-        duration = max(math.floor((motion.range.upper - motion.range.lower).total_seconds()) + pad_secs, 15)
+        duration = max(
+            math.floor((motion.range.upper - motion.range.lower).total_seconds())
+            + pad_secs,
+            15,
+        )
         save_folder = channel2folder[motion.channel_id]
         save_filename = name_recording(motion)
-        save_location = os.path.join(save_folder, save_filename)
-        logger.info(f"Fetching {save_filename}")
-        save_stream_recording(api=api, start_time=start_time, duration_secs=duration, fp=save_location, port=port,
-                              channel=motion.channel_id, stream=stream)
-
-
-
-
-
-
-
-
+        save_location = Path(save_folder) / save_filename
+        logging.info("Fetching %s", save_filename)
+        save_stream_recording(
+            api=api,
+            start_time=start_time,
+            duration_secs=duration,
+            fp=str(save_location),
+            port=port,
+            channel=motion.channel_id,
+            stream=stream,
+        )

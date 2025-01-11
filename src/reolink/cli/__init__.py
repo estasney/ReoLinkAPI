@@ -8,14 +8,16 @@ def cli():
 
 
 @cli.command()
-@click.option('-e', '--env-file', default=None)
+@click.option("-e", "--env-file", default=None)
 def get_token(env_file):
     """
     Get token for Reolink API and echo stdout. Credentials are provided via environment variables or env file.
     """
-    from reolink.settings import ReolinkApiSettings
-    from reolink.camera_api import Api
     from asyncio import run
+
+    from reolink.camera_api import Api
+    from reolink.settings import ReolinkApiSettings
+
     settings = ReolinkApiSettings(_env_file=env_file)
     api = Api(settings.api_url, settings.username, settings.password.get_secret_value())
     try:
@@ -26,9 +28,9 @@ def get_token(env_file):
 
 
 @cli.command()
-@click.option('-c', '--channel', type=int)
-@click.option('-f', '--folder', type=click.Path(file_okay=False, dir_okay=True))
-@click.option('-e', '--env-file', default=None)
+@click.option("-c", "--channel", type=int)
+@click.option("-f", "--folder", type=click.Path(file_okay=False, dir_okay=True))
+@click.option("-e", "--env-file", default=None)
 def save_snapshot(channel, folder, env_file):
     """
     Retrieve a channel's snapshot and save to folder
@@ -54,9 +56,10 @@ def save_snapshot(channel, folder, env_file):
     ```
 
     """
+    from asyncio import run
+
     from reolink.camera_api import Api
     from reolink.runners.fetch import save_snapshot as snapshot_saver
-    from asyncio import run
     from reolink.settings import ReolinkApiSettings
 
     settings = ReolinkApiSettings(_env_file=env_file)
